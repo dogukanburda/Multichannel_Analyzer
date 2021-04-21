@@ -36,11 +36,18 @@
 #include <RTClib.h>            // include Adafruit RTC library
 
 // These pins will also work for the 1.8" TFT shield.
-#define TFT_CS        10
+#define TFT_CS        53
 #define TFT_RST        9 // Or set to -1 and connect to Arduino RESET pin
 #define TFT_DC         8
-#define outputA 6
-#define outputB 7
+#define CLK 34
+#define DT 36
+#define SW 38
+
+int counter = 0;
+int currentStateCLK;
+int lastStateCLK;
+
+unsigned long lastButtonPress = 0;
 int counter = 0; 
 int aState;
 int aLastState;  
@@ -71,10 +78,14 @@ void setup(void) {
   Serial.begin(9600);
   pinMode (outputA,INPUT);
   pinMode (outputB,INPUT);
-  aLastState = digitalRead(outputA);   
+  pinMode(CLK,INPUT);
+  pinMode(DT,INPUT);
+  pinMode(SW, INPUT_PULLUP);
+  lastStateCLK = digitalRead(CLK);
 
   rtc.begin();
-  
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+
   
   int tolam_puls = 0;
  for (int i = 0; i < 128; i++)
@@ -115,6 +126,8 @@ void setup(void) {
 
 void loop() {
  int toplam_puls = 0;
+ currentStateCLK = digitalRead(CLK);
+
  now = rtc.now();  // read current time and date from the RTC chip
   tft.setCursor(x_pos[previous_dow], 103);
   tft.setTextColor(ST7735_CYAN, ST7735_BLACK);     // set text color to cyan and black background
