@@ -46,10 +46,11 @@
 int counter = 0;
 int currentStateCLK;
 int lastStateCLK;
-int currentdiv=0;
-String currentDir ="";
+
 unsigned long lastButtonPress = 0;
- 
+int counter = 0; 
+int aState;
+int aLastState;  
 
 
 
@@ -69,17 +70,19 @@ int toplam_puls;
 float faktor=1;
 byte x_pos[7] = {8, 8, 6, 4, 4, 8, 4}; // 29,29,23,11,17,29,17
 static byte previous_dow = 8;
-int div0 = 0;
-int div1 = 0;
+
  
 
 
 void setup(void) {
   Serial.begin(9600);
+  pinMode (outputA,INPUT);
+  pinMode (outputB,INPUT);
   pinMode(CLK,INPUT);
   pinMode(DT,INPUT);
   pinMode(SW, INPUT_PULLUP);
   lastStateCLK = digitalRead(CLK);
+
   rtc.begin();
   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
 
@@ -122,50 +125,8 @@ void setup(void) {
 }
 
 void loop() {
-  counter =0;
  int toplam_puls = 0;
-  int btnState = digitalRead(SW);
-
-  //If we detect LOW signal, button is pressed
-  if (btnState == LOW) {
-    //if 50ms have passed since last LOW pulse, it means that the
-    //button has been pressed, released and pressed again
-    if (millis() - lastButtonPress > 20) {
-      Serial.println("Button pressed!,currentdiv =");
-      if (currentdiv==0){
-        currentdiv=1;
-      }
-      else if (currentdiv==1){
-        currentdiv=0;
-      }
-      Serial.println(currentdiv);
-      
-    }
-
-    // Remember last button press event
-    lastButtonPress = millis();
-  }
  currentStateCLK = digitalRead(CLK);
-  if (currentStateCLK != lastStateCLK  && currentStateCLK == 1){
-  
-    // If the DT state is different than the CLK state then
-    // the encoder is rotating CCW so decrement
-    if (digitalRead(DT) != currentStateCLK) {
-      counter =-1;
-      currentDir ="CCW";
-    } else {
-      // Encoder is rotating CW so increment
-      counter =1;
-      currentDir ="CW";
-    }
-  
-    Serial.print("Direction: ");
-    Serial.print(currentDir);
-    Serial.print(" | Counter: ");
-    Serial.println(counter);
-  }
-  // Remember last CLK state
-  lastStateCLK = currentStateCLK;
 
  now = rtc.now();  // read current time and date from the RTC chip
   tft.setCursor(x_pos[previous_dow], 103);
@@ -185,7 +146,24 @@ void loop() {
   tft.setTextColor(ST7735_GREEN, ST7735_BLACK);     // set text color to green and black background
   tft.print(_buffer);
   
- 
+  aState = digitalRead(outputA); // Reads the "current" state of the outputA
+   // If the previous and the current state of the outputA are different, that means a Pulse has occured
+   if (aState != aLastState){     
+     // If the outputB state is different to the outputA state, that means the encoder is rotating clockwise
+     if (digitalRead(outputB) != aState) { 
+       counter ++;
+     } else {
+       counter --;
+     }
+     Serial.print("Position: ");
+     Serial.println(counter);
+     tft.setCursor(65,132);  
+     tft.print("Position: ");
+     tft.setCursor(65,141);
+     tft.print(counter);
+
+   } 
+   aLastState = aState; // Updates the previous state of the outputA with the current state
 
  int Index = map(analogRead(A3),0,1023,0,127);
   original_log[Index] = original_log[Index] + 1;
@@ -204,13 +182,8 @@ void loop() {
           }
         
         }
-  //int div0 = map(analogRead(A0),0,1023,0,127);
-  //int div1 = map(analogRead(A1),0,1023,0,127);
-
-  if (counter!=0 && currentdiv==0) div0=div0+counter;
-  if (counter!=0 && currentdiv==1) div1=div1+counter;
-  if (div1>127) div1=127;
-  if (div0>127) div0=127;
+  int div0 = map(analogRead(A0),0,1023,0,127);
+  int div1 = map(analogRead(A1),0,1023,0,127);
 
 for (int i = 0; i < 128; i++)
        {
@@ -249,16 +222,16 @@ for (int i = div0; i < div1; i++)
   tft.setTextSize(1);       
   tft.setTextColor(ST7735_WHITE, ST7735_BLACK);     
   tft.setCursor(4,132);  
-  tft.print("div0:" );
-  tft.setCursor(34,132);       
+  tft.print("A0:" );
+  tft.setCursor(23,132);       
   tft.print(div0);
-  //tft.print("   ");
+  tft.print("   ");
   tft.setCursor(4,141);  
-  tft.print("div1:" );
-  tft.setCursor(34,141);
+  tft.print("A1:" );
+  tft.setCursor(23,141);
   
   tft.print(div1);
-  //tft.print("   ");      
+  tft.print("   ");      
       
   tft.setCursor(4,150); 
   tft.print("puls:");
