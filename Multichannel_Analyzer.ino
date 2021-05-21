@@ -35,27 +35,14 @@
 #include <SPI.h>
 #include <RTClib.h>            // include Adafruit RTC library
 
-// These pins will also work for the 1.8" TFT shield.
+// Defining SPI Pins for TFT LCD
 #define TFT_CS        53
-#define TFT_RST        9 // Or set to -1 and connect to Arduino RESET pin
+#define TFT_RST        9
 #define TFT_DC         8
-#define CLK 34
-#define DT 36
-#define SW 38
-
-int counter = 0;
-int currentStateCLK;
-int lastStateCLK;
-
-unsigned long lastButtonPress = 0;
-int counter = 0; 
-int aState;
-int aLastState;  
 
 
-
-// For 1.44" and 1.8" TFT with ST7735 use:
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+// Initialize RTC module and configure the days
 RTC_DS3231 rtc;
 DateTime   now;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
@@ -64,71 +51,60 @@ char dow_matrix[7][10] = {"SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY"
 
 char _buffer[11];
 float p = 3.1415926;
-int pulslar[128];
-int original_log[128];
-int toplam_puls;
-float faktor=1;
+int pulslar[128]; // For drawing on LCD
+int original_log[128];    // For keeping the original logs of pulses
+int toplam_puls;          // To display the number of pulses occurred in the region of interest (ROI)
+float faktor=1;         // Multiplying factor for the histogram to not exceed the screen
+
 byte x_pos[7] = {8, 8, 6, 4, 4, 8, 4}; // 29,29,23,11,17,29,17
 static byte previous_dow = 8;
 
  
 
-
 void setup(void) {
   Serial.begin(9600);
-  pinMode (outputA,INPUT);
-  pinMode (outputB,INPUT);
-  pinMode(CLK,INPUT);
-  pinMode(DT,INPUT);
-  pinMode(SW, INPUT_PULLUP);
-  lastStateCLK = digitalRead(CLK);
-
   rtc.begin();
   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
 
-  
+
   int tolam_puls = 0;
- for (int i = 0; i < 128; i++)
+  for (int i = 0; i < 128; i++)
        {
-        pulslar[i] = 0;           // alle Pulshöhentreffer auf 0 setzen
+        pulslar[i] = 0;
        }
- for (int i = 0; i < 128; i++)
+  for (int i = 0; i < 128; i++)
        {
-        original_log[i] = 0;           // alle Pulshöhentreffer auf 0 setzen
-       }   
+        original_log[i] = 0;
+       }
   // Use this initializer if using a 1.8" TFT screen:
   tft.initR(INITR_BLACKTAB);      // Init ST7735S chip, black tab
-  uint16_t time = millis();
   tft.fillScreen(ST77XX_BLACK);
-  time = millis() - time;
- 
-  // optimized lines
-  testfastlines(ST77XX_RED, ST77XX_BLUE);
-  delay(500);
-//  testdrawrects(ST77XX_GREEN);
-//  delay(500);
   testfillrects(ST77XX_YELLOW, ST77XX_MAGENTA);
-  delay(500);
   tft.fillScreen(ST77XX_BLACK);
-  testfillcircles(10, ST77XX_BLUE);
-  testdrawcircles(10, ST77XX_WHITE);
-  delay(500);
-  tft.fillScreen(ST77XX_BLACK);
-
+  // Drawing the outline of sections for the display
   tft.drawFastHLine(0, 130, 63, ST7735_BLUE);
   tft.drawFastHLine(0, 101, tft.width(), ST7735_BLUE);
   tft.drawFastVLine(64, 100, 59, ST7735_BLUE);
   tft.drawFastHLine(0, 100,  tft.width(), ST7735_BLUE);
   tft.setTextColor(ST7735_WHITE, ST7735_BLACK);     // set text color to white and black background
-  tft.setTextSize(1);                 // text size = 1
+  tft.setTextSize(1);                               // text size = 1
+  //Outline for dividers' value and toplam puls
+  tft.setTextSize(1);       
+  tft.setTextColor(ST7735_WHITE, ST7735_BLACK);     
+  tft.setCursor(4,132);   // For the first Divider
+  tft.print("A0:" );
+  tft.setCursor(4,141);   // For the second Divider
+  tft.print("A1:" );
+  tft.setCursor(4,150);    // For the Total pulses between dividers
+  tft.print("puls:");
   
 }
 
 void loop() {
- int toplam_puls = 0;
- currentStateCLK = digitalRead(CLK);
+  
+  int toplam_puls = 0;
 
- now = rtc.now();  // read current time and date from the RTC chip
+  now = rtc.now();  // read current time and date from the RTC chip
   tft.setCursor(x_pos[previous_dow], 103);
   tft.setTextColor(ST7735_CYAN, ST7735_BLACK);     // set text color to cyan and black background
   tft.print( dow_matrix[now.dayOfTheWeek()] );
@@ -146,95 +122,56 @@ void loop() {
   tft.setTextColor(ST7735_GREEN, ST7735_BLACK);     // set text color to green and black background
   tft.print(_buffer);
   
-  aState = digitalRead(outputA); // Reads the "current" state of the outputA
-   // If the previous and the current state of the outputA are different, that means a Pulse has occured
-   if (aState != aLastState){     
-     // If the outputB state is different to the outputA state, that means the encoder is rotating clockwise
-     if (digitalRead(outputB) != aState) { 
-       counter ++;
-     } else {
-       counter --;
-     }
-     Serial.print("Position: ");
-     Serial.println(counter);
-     tft.setCursor(65,132);  
-     tft.print("Position: ");
-     tft.setCursor(65,141);
-     tft.print(counter);
-
-   } 
-   aLastState = aState; // Updates the previous state of the outputA with the current state
-
- int Index = map(analogRead(A3),0,1023,0,127);
-  original_log[Index] = original_log[Index] + 1;
-
+  int Index = map(analogRead(A3),0,1023,0,127);
+  original_log[Index] = original_log[Index] + 1;    // Reads from analog pin and appends to the right channel accordingly
 
   bool flag=1;
+  pulslar[Index] = pulslar[Index] + 1;
 
-  
-        
-         pulslar[Index] = pulslar[Index] + 1;
-        
-        for(int t=0;t<127&&flag==1;t++){
-            if(pulslar[t]>100/faktor){
-              faktor=faktor/2;
-                 flag=0;    
-          }
-        
-        }
-  int div0 = map(analogRead(A0),0,1023,0,127);
-  int div1 = map(analogRead(A1),0,1023,0,127);
+  for(int t=0;t<127&&flag==1;t++){                  // This code is for checking if the pulses exceeded display screen
+    if(pulslar[t]>100/faktor){                      // Needs to be optimized.
+      faktor=faktor/2;
+      flag=0;
+      }
+      }
+  unsigned char div0 = map(analogRead(A0),0,1023,0,127); //first divider index between 0-127
+  unsigned char div1 = map(analogRead(A1),0,1023,0,127); //second divider index between 0-127
 
-for (int i = 0; i < 128; i++)
-       {
-       tft.drawLine(i,100,i,100-pulslar[i],ST7735_RED);
-       tft.drawLine(i,100-int(faktor*pulslar[i]),i,0,ST7735_BLACK);
-       tft.drawLine(div0,100,div0,0,ST7735_BLUE);
-       tft.drawLine(div1,100,div1,0,ST7735_BLUE);
-
-       }
- 
-
-  
-//  tft.drawFastVLine(div0,0,101, ST7735_BLUE);
-//  tft.drawFastVLine(div1,0,101, ST7735_BLUE);
-//  tft.drawLine(div0,100,div0,0,ST7735_RED);
-//  tft.drawLine(div1,100,div1,0,ST7735_RED);
-  if( div0 < div1){
-    for (int i = div0; i < div1; i++){
-      toplam_puls = toplam_puls + original_log[i];
+  for (int i = 0; i < 128; i++){
+    tft.drawLine(i,100,i,100-pulslar[i],ST7735_RED);
+    tft.drawLine(i,100-int(faktor*pulslar[i]),i,0,ST7735_BLACK);
+    tft.drawLine(div0,100,div0,0,ST7735_BLUE);
+    tft.drawLine(div1,100,div1,0,ST7735_BLUE);
     }
 
     
-  }
+  tft.drawLine(div0,100,div0,0,ST7735_RED);
+  tft.drawLine(div1,100,div1,0,ST7735_RED);
+  if( div0 < div1){
+    for (int i = div0; i < div1; i++){
+      toplam_puls = toplam_puls + original_log[i];
+      }
+      }
   else {
     for (int i = div1; i < div0; i++){
       toplam_puls = toplam_puls + original_log[i];
-  }
-  }
-for (int i = div0; i < div1; i++)
-       {
-       tft.drawLine(i,100,i,100-pulslar[i],ST7735_RED);
-       tft.drawLine(i,100-int(faktor*pulslar[i]),i,0,ST7735_BLACK);
-
-       }
+      }
+      }
+  
+  for (int i = div0; i < div1; i++)
+     {
+     tft.drawLine(i,100,i,100-pulslar[i],ST7735_RED);
+     tft.drawLine(i,100-int(faktor*pulslar[i]),i,0,ST7735_BLACK);
+     }
         
-  tft.setTextSize(1);       
-  tft.setTextColor(ST7735_WHITE, ST7735_BLACK);     
-  tft.setCursor(4,132);  
-  tft.print("A0:" );
-  tft.setCursor(23,132);       
+
+  tft.setCursor(23,132);
   tft.print(div0);
   tft.print("   ");
-  tft.setCursor(4,141);  
-  tft.print("A1:" );
   tft.setCursor(23,141);
-  
   tft.print(div1);
-  tft.print("   ");      
-      
-  tft.setCursor(4,150); 
-  tft.print("puls:");
+  tft.print("   ");
+
   tft.setCursor(35,150);
   tft.print(toplam_puls);
   tft.print("  ");
