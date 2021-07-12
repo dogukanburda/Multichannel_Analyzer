@@ -56,6 +56,8 @@ int original_log[128];    // For keeping the original logs of pulses
 int toplam_puls;          // To display the number of pulses occurred in the region of interest (ROI)
 float faktor=1;         // Multiplying factor for the histogram to not exceed the screen
 
+unsigned long oncekizaman = 0; 
+
 byte x_pos[7] = {8, 8, 6, 4, 4, 8, 4}; // 29,29,23,11,17,29,17
 static byte previous_dow = 8;
 
@@ -63,9 +65,12 @@ static byte previous_dow = 8;
 
 void setup(void) {
   Serial.begin(9600);
+  tft.initR(INITR_BLACKTAB);
   rtc.begin();
   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-
+  //pinMode(2, INPUT);
+  pinMode(2, INPUT); // comparator çıkışı pin 2
+  pinMode(3, OUTPUT);  //reset pulse'ı pin 3
 
   int tolam_puls = 0;
   for (int i = 0; i < 128; i++)
@@ -79,7 +84,6 @@ void setup(void) {
   // Use this initializer if using a 1.8" TFT screen:
   tft.initR(INITR_BLACKTAB);      // Init ST7735S chip, black tab
   tft.fillScreen(ST77XX_BLACK);
-  testfillrects(ST77XX_YELLOW, ST77XX_MAGENTA);
   tft.fillScreen(ST77XX_BLACK);
   // Drawing the outline of sections for the display
   tft.drawFastHLine(0, 130, 63, ST7735_BLUE);
@@ -92,18 +96,25 @@ void setup(void) {
   tft.setTextSize(1);       
   tft.setTextColor(ST7735_WHITE, ST7735_BLACK);     
   tft.setCursor(4,132);   // For the first Divider
-  tft.print("A0:" );
+  tft.print("CH1:" );
   tft.setCursor(4,141);   // For the second Divider
-  tft.print("A1:" );
+  tft.print("CH2:" );
   tft.setCursor(4,150);    // For the Total pulses between dividers
   tft.print("puls:");
   
 }
 
 void loop() {
-  
-  int toplam_puls = 0;
+  unsigned long ilkzaman = millis();
+  int val = digitalRead(2);
+  if (val == 1) {
+    int deger = analogRead(A5);   // genliği okuduğum pin A5
+    digitalWrite(3,HIGH);
+    delayMicroseconds(1);
+    digitalWrite(3,LOW);
 
+  Serial.println(deger);
+  int toplam_puls = 0;
   now = rtc.now();  // read current time and date from the RTC chip
   tft.setCursor(x_pos[previous_dow], 103);
   tft.setTextColor(ST7735_CYAN, ST7735_BLACK);     // set text color to cyan and black background
@@ -121,32 +132,33 @@ void loop() {
   tft.setCursor(4, 121);
   tft.setTextColor(ST7735_GREEN, ST7735_BLACK);     // set text color to green and black background
   tft.print(_buffer);
-  
-  int Index = map(analogRead(A3),0,1023,0,127);
+
+  int Index = map(deger,0,1023,0,127);
   original_log[Index] = original_log[Index] + 1;    // Reads from analog pin and appends to the right channel accordingly
 
   bool flag=1;
   pulslar[Index] = pulslar[Index] + 1;
-
+  
   for(int t=0;t<127&&flag==1;t++){                  // This code is for checking if the pulses exceeded display screen
     if(pulslar[t]>100/faktor){                      // Needs to be optimized.
       faktor=faktor/2;
       flag=0;
       }
       }
-  unsigned char div0 = map(analogRead(A0),0,1023,0,127); //first divider index between 0-127
+  
+  unsigned char div0 = map(analogRead(A3),0,1023,0,127); //first divider index between 0-127
   unsigned char div1 = map(analogRead(A1),0,1023,0,127); //second divider index between 0-127
 
   for (int i = 0; i < 128; i++){
     tft.drawLine(i,100,i,100-pulslar[i],ST7735_RED);
     tft.drawLine(i,100-int(faktor*pulslar[i]),i,0,ST7735_BLACK);
-    tft.drawLine(div0,100,div0,0,ST7735_BLUE);
-    tft.drawLine(div1,100,div1,0,ST7735_BLUE);
+    //tft.drawLine(div0,100,div0,0,ST7735_WHITE);
+    //tft.drawLine(div1,100,div1,0,ST7735_WHITE);
     }
 
-    
-  tft.drawLine(div0,100,div0,0,ST7735_RED);
-  tft.drawLine(div1,100,div1,0,ST7735_RED);
+  
+  tft.drawLine(div0,100,div0,0,ST7735_WHITE);
+  tft.drawLine(div1,100,div1,0,ST7735_WHITE);
   if( div0 < div1){
     for (int i = div0; i < div1; i++){
       toplam_puls = toplam_puls + original_log[i];
@@ -158,12 +170,13 @@ void loop() {
       }
       }
   
-  for (int i = div0; i < div1; i++)
+  for (int i = div0+1; i < div1; i++)
      {
      tft.drawLine(i,100,i,100-pulslar[i],ST7735_RED);
      tft.drawLine(i,100-int(faktor*pulslar[i]),i,0,ST7735_BLACK);
      }
-        
+  tft.drawLine(div0,100,div0,0,ST7735_WHITE);
+
 
   tft.setCursor(23,132);
   tft.print(div0);
@@ -175,9 +188,11 @@ void loop() {
   tft.setCursor(35,150);
   tft.print(toplam_puls);
   tft.print("  ");
+  unsigned long ikincizaman = millis();
+  unsigned long timer=ikincizaman-ilkzaman;
+  Serial.println(timer);
 }
-
-
+}
 
 
 void RTC_display()
@@ -238,14 +253,6 @@ void testfillcircles(uint8_t radius, uint16_t color) {
   for (int16_t x=radius; x < tft.width(); x+=radius*2) {
     for (int16_t y=radius; y < tft.height(); y+=radius*2) {
       tft.fillCircle(x, y, radius, color);
-    }
-  }
-}
-
-void testdrawcircles(uint8_t radius, uint16_t color) {
-  for (int16_t x=0; x < tft.width()+radius; x+=radius*2) {
-    for (int16_t y=0; y < tft.height()+radius; y+=radius*2) {
-      tft.drawCircle(x, y, radius, color);
     }
   }
 }
